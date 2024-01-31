@@ -271,6 +271,11 @@ const (
 	InferenceServiceLabel       = "serving.kserve.io/inferenceservice"
 )
 
+// Labels for Ingress
+const (
+	IngressPathLabel = "serving.kserve.io/ingress-path"
+)
+
 // InferenceService default/canary constants
 const (
 	InferenceServiceDefault = "default"

@@ -35,6 +35,7 @@ import (
 	"knative.dev/pkg/network"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"strings"
 )
 
 // RawIngressReconciler reconciles the kubernetes ingress
@@ -159,6 +160,7 @@ func createRawIngress(scheme *runtime.Scheme, isvc *v1beta1.InferenceService,
 		return nil, nil
 	}
 	var rules []netv1.IngressRule
+	var path = getIngressPath(isvc.Labels)
 	existing := &corev1.Service{}
 	predictorName := constants.PredictorServiceName(isvc.Name)
 	if isvc.Spec.Transformer != nil {
@@ -191,11 +193,11 @@ func createRawIngress(scheme *runtime.Scheme, isvc *v1beta1.InferenceService,
 			if err != nil {
 				return nil, fmt.Errorf("failed creating explainer ingress host: %v", err)
 			}
-			rules = append(rules, generateRule(explainerHost, explainerName, "/", constants.CommonDefaultHttpPort))
+			rules = append(rules, generateRule(explainerHost, explainerName, path, constants.CommonDefaultHttpPort))
 		}
 		// :predict routes to the transformer when there are both predictor and transformer
-		rules = append(rules, generateRule(host, transformerName, "/", constants.CommonDefaultHttpPort))
-		rules = append(rules, generateRule(transformerHost, predictorName, "/", constants.CommonDefaultHttpPort))
+		rules = append(rules, generateRule(host, transformerName, path, constants.CommonDefaultHttpPort))
+		rules = append(rules, generateRule(transformerHost, predictorName, path, constants.CommonDefaultHttpPort))
 	} else if isvc.Spec.Explainer != nil {
 		if !isvc.Status.IsConditionReady(v1beta1.ExplainerReady) {
 			isvc.Status.SetCondition(v1beta1.IngressReady, &apis.Condition{
@@ -220,8 +222,8 @@ func createRawIngress(scheme *runtime.Scheme, isvc *v1beta1.InferenceService,
 			return nil, fmt.Errorf("failed creating explainer ingress host: %v", err)
 		}
 		// :predict routes to the predictor when there is only predictor and explainer
-		rules = append(rules, generateRule(host, predictorName, "/", constants.CommonDefaultHttpPort))
-		rules = append(rules, generateRule(explainerHost, explainerName, "/", constants.CommonDefaultHttpPort))
+		rules = append(rules, generateRule(host, predictorName, path, constants.CommonDefaultHttpPort))
+		rules = append(rules, generateRule(explainerHost, explainerName, path, constants.CommonDefaultHttpPort))
 	} else {
 		err := client.Get(context.TODO(), types.NamespacedName{Name: constants.DefaultPredictorServiceName(isvc.Name), Namespace: isvc.Namespace}, existing)
 		if err == nil {
@@ -231,14 +233,14 @@ func createRawIngress(scheme *runtime.Scheme, isvc *v1beta1.InferenceService,
 		if err != nil {
 			return nil, fmt.Errorf("failed creating top level predictor ingress host: %v", err)
 		}
-		rules = append(rules, generateRule(host, predictorName, "/", constants.CommonDefaultHttpPort))
+		rules = append(rules, generateRule(host, predictorName, path, constants.CommonDefaultHttpPort))
 	}
 	//add predictor rule
 	predictorHost, err := generateIngressHost(ingressConfig, isvc, string(constants.Predictor), false, predictorName)
 	if err != nil {
 		return nil, fmt.Errorf("failed creating predictor ingress host: %v", err)
 	}
-	rules = append(rules, generateRule(predictorHost, predictorName, "/", constants.CommonDefaultHttpPort))
+	rules = append(rules, generateRule(predictorHost, predictorName, path, constants.CommonDefaultHttpPort))
 
 	ingress := &netv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
@@ -318,4 +320,13 @@ func (r *RawIngressReconciler) Reconcile(isvc *v1beta1.InferenceService) error {
 		Status: corev1.ConditionTrue,
 	})
 	return nil
+}
+
+func getIngressPath(labels map[string]string) string {
+	if val, ok := labels[constants.IngressPathLabel]; ok {
+		if strings.TrimSpace(val) != "" {
+			return val
+		}
+	}
+	return "/"
 }
