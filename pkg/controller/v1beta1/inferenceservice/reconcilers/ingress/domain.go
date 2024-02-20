@@ -19,6 +19,7 @@ package ingress
 import (
 	"bytes"
 	"fmt"
+	"github.com/kserve/kserve/pkg/constants"
 	"text/template"
 
 	"github.com/kserve/kserve/pkg/apis/serving/v1beta1"
@@ -44,8 +45,17 @@ func GenerateDomainName(name string, obj metav1.ObjectMeta, ingressConfig *v1bet
 		Annotations:   obj.Annotations,
 		Labels:        obj.Labels,
 	}
+	// support custom domain
+	if values.Annotations != nil && values.Annotations[constants.IngressDomainLabel] != "" {
+		values.IngressDomain = values.Annotations[constants.IngressDomainLabel]
+	}
 
-	tpl, err := template.New("domain-template").Parse(ingressConfig.DomainTemplate)
+	domainTempl := ingressConfig.DomainTemplate
+	if values.Annotations != nil && values.Annotations[constants.DomainTemplateLabel] != "" {
+		domainTempl = values.Annotations[constants.DomainTemplateLabel]
+	}
+
+	tpl, err := template.New("domain-template").Parse(domainTempl)
 	if err != nil {
 		return "", err
 	}

@@ -273,7 +273,9 @@ const (
 
 // Labels for Ingress
 const (
-	IngressPathLabel = "serving.kserve.io/ingress-path"
+	IngressPathLabel    = "serving.kserve.io/ingress-path"
+	IngressDomainLabel  = "serving.kserve.io/ingress-domain"
+	DomainTemplateLabel = "serving.kserve.io/domain-template"
 )
 
 // InferenceService default/canary constants
