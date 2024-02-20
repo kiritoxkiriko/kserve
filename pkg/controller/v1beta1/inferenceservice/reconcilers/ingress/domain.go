@@ -46,13 +46,13 @@ func GenerateDomainName(name string, obj metav1.ObjectMeta, ingressConfig *v1bet
 		Labels:        obj.Labels,
 	}
 	// support custom domain
-	if values.Annotations != nil && values.Annotations[constants.IngressDomainLabel] != "" {
-		values.IngressDomain = values.Annotations[constants.IngressDomainLabel]
+	if values.Annotations != nil && values.Annotations[constants.IngressDomainAnnotationKey] != "" {
+		values.IngressDomain = values.Annotations[constants.IngressDomainAnnotationKey]
 	}
 
 	domainTempl := ingressConfig.DomainTemplate
-	if values.Annotations != nil && values.Annotations[constants.DomainTemplateLabel] != "" {
-		domainTempl = values.Annotations[constants.DomainTemplateLabel]
+	if values.Annotations != nil && values.Annotations[constants.DomainTemplateAnnotationKey] != "" {
+		domainTempl = values.Annotations[constants.DomainTemplateAnnotationKey]
 	}
 
 	tpl, err := template.New("domain-template").Parse(domainTempl)

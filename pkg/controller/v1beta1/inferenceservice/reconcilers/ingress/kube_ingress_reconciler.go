@@ -160,7 +160,7 @@ func createRawIngress(scheme *runtime.Scheme, isvc *v1beta1.InferenceService,
 		return nil, nil
 	}
 	var rules []netv1.IngressRule
-	var path = getIngressPath(isvc.Labels)
+	var path = getIngressPath(isvc.Annotations)
 	existing := &corev1.Service{}
 	predictorName := constants.PredictorServiceName(isvc.Name)
 	if isvc.Spec.Transformer != nil {
@@ -322,8 +322,8 @@ func (r *RawIngressReconciler) Reconcile(isvc *v1beta1.InferenceService) error {
 	return nil
 }
 
-func getIngressPath(labels map[string]string) string {
-	if val, ok := labels[constants.IngressPathLabel]; ok {
+func getIngressPath(annos map[string]string) string {
+	if val, ok := annos[constants.IngressPathAnnotationKey]; ok {
 		if strings.TrimSpace(val) != "" {
 			return val
 		}
