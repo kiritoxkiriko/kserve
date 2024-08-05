@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "xgbserver"
-version = "0.11.2"
+version = "0.13.1"
 description = "Model Server implementation for XGBoost. Not intended for use outside KServe Frameworks Images."
 authors = ["Ellis Tarn <ellisbigelow@google.com>"]
 license = "https://github.com/kserve/kserve/blob/master/LICENSE"
@@ -12,7 +12,7 @@ packages = [
 [tool.poetry.dependencies]
 python = ">=3.8,<3.12"
 kserve = { path = "../kserve", extras = ["storage"], develop = true }
-xgboost = "~1.7.5"
+xgboost = "~2.0.2"
 
 [tool.poetry.group.test]
 optional = true
@@ -23,6 +23,12 @@ pytest = "^7.2.0"
 pytest-cov = "^4.0.0"
 mypy = "^0.991"
 pytest-asyncio = "^0.20.3"
+
+[tool.poetry.group.dev]
+optional = true
+
+[tool.poetry.group.dev.dependencies]
+black = { version = "~24.3.0", extras = ["colorama"] }
 
 [tool.poetry-version-plugin]
 source = "file"

@@ -21,14 +21,15 @@ import (
 	"reflect"
 	"strconv"
 
-	"github.com/kserve/kserve/pkg/constants"
-	"github.com/kserve/kserve/pkg/utils"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+
+	"github.com/kserve/kserve/pkg/constants"
+	"github.com/kserve/kserve/pkg/utils"
 )
 
 var (
@@ -65,15 +66,21 @@ func setResourceRequirementDefaults(requirements *v1.ResourceRequirements) {
 
 func (isvc *InferenceService) Default() {
 	mutatorLogger.Info("Defaulting InferenceService", "namespace", isvc.Namespace, "isvc", isvc.Spec.Predictor)
-	cli, err := client.New(config.GetConfigOrDie(), client.Options{})
+	cfg, err := config.GetConfig()
 	if err != nil {
-		panic("Failed to create client in defaulter")
+		mutatorLogger.Error(err, "unable to set up client config")
+		panic(err)
 	}
-	configMap, err := NewInferenceServicesConfig(cli)
+	clientSet, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		mutatorLogger.Error(err, "unable to create clientSet")
+		panic(err)
+	}
+	configMap, err := NewInferenceServicesConfig(clientSet)
 	if err != nil {
 		panic(err)
 	}
-	deployConfig, err := NewDeployConfig(cli)
+	deployConfig, err := NewDeployConfig(clientSet)
 	if err != nil {
 		panic(err)
 	}
@@ -135,6 +142,9 @@ func (isvc *InferenceService) setPredictorModelDefaults() {
 
 	case isvc.Spec.Predictor.ONNX != nil:
 		isvc.assignONNXRuntime()
+
+	case isvc.Spec.Predictor.HuggingFace != nil:
+		isvc.assignHuggingFaceRuntime()
 
 	case isvc.Spec.Predictor.PMML != nil:
 		isvc.assignPMMLRuntime()
@@ -219,6 +229,20 @@ func (isvc *InferenceService) assignONNXRuntime() {
 	isvc.Spec.Predictor.ONNX = nil
 }
 
+func (isvc *InferenceService) assignHuggingFaceRuntime() {
+	// assign protocol version 'v2' if not provided for backward compatibility
+	if isvc.Spec.Predictor.HuggingFace.ProtocolVersion == nil {
+		protocolV2 := constants.ProtocolV2
+		isvc.Spec.Predictor.HuggingFace.ProtocolVersion = &protocolV2
+	}
+	isvc.Spec.Predictor.Model = &ModelSpec{
+		ModelFormat:            ModelFormat{Name: constants.SupportedModelHuggingFace},
+		PredictorExtensionSpec: isvc.Spec.Predictor.HuggingFace.PredictorExtensionSpec,
+	}
+	// remove huggingface spec
+	isvc.Spec.Predictor.HuggingFace = nil
+}
+
 func (isvc *InferenceService) assignPMMLRuntime() {
 	isvc.Spec.Predictor.Model = &ModelSpec{
 		ModelFormat:            ModelFormat{Name: constants.SupportedModelPMML},
@@ -289,11 +313,12 @@ func (isvc *InferenceService) SetMlServerDefaults() {
 	}
 	// set model class
 	modelClass := constants.MLServerModelClassSKLearn
-	if isvc.Spec.Predictor.Model.ModelFormat.Name == constants.SupportedModelXGBoost {
+	switch isvc.Spec.Predictor.Model.ModelFormat.Name {
+	case constants.SupportedModelXGBoost:
 		modelClass = constants.MLServerModelClassXGBoost
-	} else if isvc.Spec.Predictor.Model.ModelFormat.Name == constants.SupportedModelLightGBM {
+	case constants.SupportedModelLightGBM:
 		modelClass = constants.MLServerModelClassLightGBM
-	} else if isvc.Spec.Predictor.Model.ModelFormat.Name == constants.SupportedModelMLFlow {
+	case constants.SupportedModelMLFlow:
 		modelClass = constants.MLServerModelClassMLFlow
 	}
 	if isvc.ObjectMeta.Labels == nil {
@@ -315,7 +340,7 @@ func (isvc *InferenceService) SetTorchServeDefaults() {
 	} else {
 		isvc.ObjectMeta.Labels[constants.ServiceEnvelope] = constants.ServiceEnvelopeKServe
 	}
-	if constants.ProtocolV2 == *isvc.Spec.Predictor.Model.ProtocolVersion {
+	if (constants.ProtocolV2 == *isvc.Spec.Predictor.Model.ProtocolVersion) || (constants.ProtocolGRPCV2 == *isvc.Spec.Predictor.Model.ProtocolVersion) {
 		isvc.ObjectMeta.Labels[constants.ServiceEnvelope] = constants.ServiceEnvelopeKServeV2
 	}
 

@@ -4,11 +4,12 @@ ARG VENV_PATH=/prod_venv
 
 FROM ${BASE_IMAGE} as builder
 
-RUN apt-get update && apt-get install -y gcc python3-dev
+RUN apt-get update && apt-get install -y gcc python3-dev && apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Install Poetry
 ARG POETRY_HOME=/opt/poetry
-ARG POETRY_VERSION=1.4.0
+ARG POETRY_VERSION=1.7.1
 
 RUN python3 -m venv ${POETRY_HOME} && ${POETRY_HOME}/bin/pip install poetry==${POETRY_VERSION}
 ENV PATH="$PATH:${POETRY_HOME}/bin"

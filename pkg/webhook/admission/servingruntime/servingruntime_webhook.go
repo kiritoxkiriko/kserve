@@ -18,13 +18,13 @@ package servingruntime
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"github.com/kserve/kserve/pkg/constants"
 	"net/http"
+	"strings"
+
+	"github.com/kserve/kserve/pkg/constants"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"strings"
 
 	"github.com/kserve/kserve/pkg/apis/serving/v1alpha1"
 
@@ -34,9 +34,12 @@ import (
 var log = logf.Log.WithName(constants.ServingRuntimeValidatorWebhookName)
 
 const (
-	InvalidPriorityError                      = "Same priority assigned for the model format %s"
-	InvalidPriorityServingRuntimeError        = "%s in the servingruntimes %s and %s in namespace %s"
-	InvalidPriorityClusterServingRuntimeError = "%s in the clusterservingruntimes %s and %s"
+	InvalidPriorityError                       = "Same priority assigned for the model format %s"
+	InvalidPriorityServingRuntimeError         = "%s in the servingruntimes %s and %s in namespace %s"
+	InvalidPriorityClusterServingRuntimeError  = "%s in the clusterservingruntimes %s and %s"
+	ProrityIsNotSameError                      = "Different priorities assigned for the model format %s"
+	ProrityIsNotSameServingRuntimeError        = "%s under the servingruntime %s"
+	ProrityIsNotSameClusterServingRuntimeError = "%s under the clusterservingruntime %s"
 )
 
 // +kubebuilder:webhook:verbs=create;update,path=/validate-serving-kserve-io-v1alpha1-clusterservingruntime,mutating=false,failurePolicy=fail,groups=serving.kserve.io,resources=clusterservingruntimes,versions=v1alpha1,name=clusterservingruntime.kserve-webhook-server.validator
@@ -72,6 +75,10 @@ func (sr *ServingRuntimeValidator) Handle(ctx context.Context, req admission.Req
 	}
 
 	for i := range ExistingRuntimes.Items {
+		if err := validateModelFormatPrioritySame(&servingRuntime.Spec); err != nil {
+			return admission.Denied(fmt.Sprintf(ProrityIsNotSameServingRuntimeError, err.Error(), servingRuntime.Name))
+		}
+
 		if err := validateServingRuntimePriority(&servingRuntime.Spec, &ExistingRuntimes.Items[i].Spec, servingRuntime.Name, ExistingRuntimes.Items[i].Name); err != nil {
 			return admission.Denied(fmt.Sprintf(InvalidPriorityServingRuntimeError, err.Error(), ExistingRuntimes.Items[i].Name, servingRuntime.Name, servingRuntime.Namespace))
 		}
@@ -99,6 +106,9 @@ func (csr *ClusterServingRuntimeValidator) Handle(ctx context.Context, req admis
 	}
 
 	for i := range ExistingRuntimes.Items {
+		if err := validateModelFormatPrioritySame(&clusterServingRuntime.Spec); err != nil {
+			return admission.Denied(fmt.Sprintf(ProrityIsNotSameClusterServingRuntimeError, err.Error(), clusterServingRuntime.Name))
+		}
 		if err := validateServingRuntimePriority(&clusterServingRuntime.Spec, &ExistingRuntimes.Items[i].Spec, clusterServingRuntime.Name, ExistingRuntimes.Items[i].Name); err != nil {
 			return admission.Denied(fmt.Sprintf(InvalidPriorityClusterServingRuntimeError, err.Error(), ExistingRuntimes.Items[i].Name, clusterServingRuntime.Name))
 		}
@@ -112,6 +122,26 @@ func areSupportedModelFormatsEqual(m1 v1alpha1.SupportedModelFormat, m2 v1alpha1
 		return true
 	}
 	return false
+}
+
+func validateModelFormatPrioritySame(newSpec *v1alpha1.ServingRuntimeSpec) error {
+	nameToPriority := make(map[string]*int32)
+
+	// Validate when same model format has same priority under same runtime.
+	// If the same model format has different prority value then throws the error
+	for _, newModelFormat := range newSpec.SupportedModelFormats {
+		// Only validate priority if autoselect is ture
+		if newModelFormat.IsAutoSelectEnabled() {
+			if existingPriority, ok := nameToPriority[newModelFormat.Name]; ok {
+				if existingPriority != nil && newModelFormat.Priority != nil && (*existingPriority != *newModelFormat.Priority) {
+					return fmt.Errorf(ProrityIsNotSameError, newModelFormat.Name)
+				}
+			} else {
+				nameToPriority[newModelFormat.Name] = newModelFormat.Priority
+			}
+		}
+	}
+	return nil
 }
 
 func validateServingRuntimePriority(newSpec *v1alpha1.ServingRuntimeSpec, existingSpec *v1alpha1.ServingRuntimeSpec, existingRuntimeName string, newRuntimeName string) error {
@@ -133,7 +163,7 @@ func validateServingRuntimePriority(newSpec *v1alpha1.ServingRuntimeSpec, existi
 				// Only validate priority if autoselect is ture
 				if existingModelFormat.IsAutoSelectEnabled() && newModelFormat.IsAutoSelectEnabled() && areSupportedModelFormatsEqual(existingModelFormat, newModelFormat) {
 					if existingModelFormat.Priority != nil && newModelFormat.Priority != nil && *existingModelFormat.Priority == *newModelFormat.Priority {
-						return errors.New(fmt.Sprintf(InvalidPriorityError, newModelFormat.Name))
+						return fmt.Errorf(InvalidPriorityError, newModelFormat.Name)
 					}
 				}
 			}
@@ -149,34 +179,4 @@ func contains[T comparable](slice []T, element T) bool {
 		}
 	}
 	return false
-}
-
-// InjectClient injects the client.
-func (csr *ClusterServingRuntimeValidator) InjectClient(c client.Client) error {
-	csr.Client = c
-	return nil
-}
-
-// ClusterServingRuntimeValidator implements admission.DecoderInjector.
-// A decoder will be automatically injected.
-
-// InjectDecoder injects the decoder.
-func (csr *ClusterServingRuntimeValidator) InjectDecoder(d *admission.Decoder) error {
-	csr.Decoder = d
-	return nil
-}
-
-// InjectClient injects the client.
-func (sr *ServingRuntimeValidator) InjectClient(c client.Client) error {
-	sr.Client = c
-	return nil
-}
-
-// ServingRuntimeValidator implements admission.DecoderInjector.
-// A decoder will be automatically injected.
-
-// InjectDecoder injects the decoder.
-func (sr *ServingRuntimeValidator) InjectDecoder(d *admission.Decoder) error {
-	sr.Decoder = d
-	return nil
 }

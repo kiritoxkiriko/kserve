@@ -69,11 +69,22 @@ func Create(fileName string) (*os.File, error) {
 }
 
 func RemoveDir(dir string) error {
-	d, err := os.Open(dir)
+	// Validate and sanitize the directory path
+	cleanDir := filepath.Clean(dir)
+	if cleanDir != dir {
+		// Directory path contains invalid characters or tries to escape the expected directory structure
+		return fmt.Errorf("the directory contains invalid characters: %s", dir)
+	}
+	d, err := os.Open(cleanDir)
 	if err != nil {
 		return err
 	}
-	defer d.Close()
+	defer func(d *os.File) {
+		closeErr := d.Close()
+		if closeErr != nil {
+			log.Error(closeErr, "failed to close file")
+		}
+	}(d)
 	names, err := d.Readdirnames(-1)
 	if err != nil {
 		return err
@@ -86,7 +97,7 @@ func RemoveDir(dir string) error {
 	}
 	// Remove empty dir
 	if err := os.Remove(dir); err != nil {
-		return fmt.Errorf("dir is unable to be deleted: %v", err)
+		return fmt.Errorf("dir is unable to be deleted: %w", err)
 	}
 	return nil
 }
@@ -127,10 +138,16 @@ func GetProvider(providers map[Protocol]Provider, protocol Protocol) (Provider, 
 		if ok && strings.ToLower(useVirtualBucketString) == "false" {
 			useVirtualBucket = false
 		}
+		useAccelerateString, ok := os.LookupEnv(s3credential.S3UseAccelerate)
+		useAccelerate := false
+		if ok && strings.ToLower(useAccelerateString) == "true" {
+			useAccelerate = true
+		}
 
 		awsConfig := aws.Config{
 			Region:           aws.String(region),
 			S3ForcePathStyle: aws.Bool(!useVirtualBucket),
+			S3UseAccelerate:  aws.Bool(useAccelerate),
 		}
 
 		if endpoint, ok := os.LookupEnv(s3credential.AWSEndpointUrl); ok {

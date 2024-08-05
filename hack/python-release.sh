@@ -6,13 +6,20 @@ cd ./python
 echo "Installing poetry version plugin"
 pip install plugin/poetry-version-plugin
 
-packages=$(find . -maxdepth 1 -type d)
+# Update the kserve package first as other packages depends on it.
+pushd kserve
+poetry lock --no-update
+popd
 
-for folder in ${packages[@]}
+pyproject_files=$(find . -type f -name "pyproject.toml" -not -path "./pyproject.toml") # Skip python/pyproject.toml
+for file in ${pyproject_files[@]}
 do
+    folder=$(dirname "${file}")
     echo "moving into folder ${folder}"
-    if [[ ${folder} == 'plugin' || ! -f "${folder}/pyproject.toml" ]]; then
-        echo -e "\033[33mskipping folder ${folder}\033[0m"
+
+    # Check if the folder contains "plugin" or if it is "plugin" and skip kserve folder
+    if [[ ${folder} == *'plugin'* || ${folder} == 'plugin' || ${folder} == 'kserve' ]]; then
+        echo -e "\033[33mSkipping folder ${folder}\033[0m"
         continue
     fi
     pushd "${folder}"

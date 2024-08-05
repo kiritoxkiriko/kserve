@@ -22,17 +22,11 @@ configurations:
 
 replacements:
   - source:
-      group: cert-manager.io
-      kind: Certificate
-      name: serving-cert
-      version: v1
       fieldPath: metadata.namespace
+      kind: Deployment
+      name: kserve-controller-manager
+      version: v1
     targets:
-      - select:
-          kind: CustomResourceDefinition
-          name: inferenceservices.serving.kserve.io
-        fieldPaths:
-          - spec.conversion.webhook.clientConfig.service.namespace
       - select:
           kind: MutatingWebhookConfiguration
           name: inferenceservice.serving.kserve.io

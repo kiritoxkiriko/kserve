@@ -1,12 +1,12 @@
 # Build the manager binary
-FROM golang:1.20 as builder
+FROM golang:1.21 as builder
 
 # Copy in the go src
 WORKDIR /go/src/github.com/kserve/kserve
 COPY go.mod  go.mod
 COPY go.sum  go.sum
 
-RUN  go mod download
+RUN go mod download
 
 COPY cmd/    cmd/
 COPY pkg/    pkg/
